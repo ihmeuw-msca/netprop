@@ -130,10 +130,9 @@ class Model:
                              bounds=self.bounds,
                              **fit_options)
         self.beta = self.soln.x
-        jacobian2 = self.jacobian2(self.beta)[self.var_index, self.var_index]
-        jacobian2 = jacobian2.reshape(len(self.var_index), len(self.var_index))
+        jacobian2 = self.jacobian2(self.beta)[np.ix_(self.var_index, self.var_index)]
         self.beta_vcov = np.zeros((self.size, self.size))
-        self.beta_vcov[self.var_index, self.var_index] = np.linalg.inv(jacobian2)
+        self.beta_vcov[np.ix_(self.var_index, self.var_index)] = np.linalg.inv(jacobian2)
 
     def predict(self,
                 df: DataFrame,
