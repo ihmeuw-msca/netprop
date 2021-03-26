@@ -186,7 +186,7 @@ class Data:
         cols = [self.key, self.obs, self.obs_se, self.ref_dorm, self.alt_dorm]
         if other_cols is not None:
             cols.extend([Column(col_name) for col_name in other_cols])
-        cols.append(InterceptColumn)
+        cols.append(InterceptColumn())
 
         for col in cols:
             self.add_column(col)

@@ -1,6 +1,7 @@
 from typing import Iterable
 import numpy as np
 from numpy import ndarray
+from scipy.optimize import minimize
 from netprop.data import Data, DormColumn
 from netprop.dorm_model import DormModel
 from netprop.utils import sizes_to_slices
@@ -23,8 +24,9 @@ class Model:
         }
         self.gold_dorm = gold_dorm
 
-        self.dorms = self.data.unique_dorms
-        self.dorm_model_sizes = [dorm_models[name].size for name in self.dorms]
+        self.dorms = list(self.data.unique_dorms)
+        self.dorm_model_sizes = [self.dorm_models[name].size
+                                 for name in self.dorms]
         slices = sizes_to_slices(self.dorm_model_sizes)
         self.dorm_model_index = {
             name: slices[i]
@@ -40,6 +42,11 @@ class Model:
             for name in self.dorms
         }
 
+        self.bounds = np.repeat(np.array([[-np.inf, np.inf]]), self.size, axis=0)
+        self.bounds[self.dorm_model_index[self.gold_dorm]] = 0.0
+        self.soln = None
+        self.beta = np.zeros(self.size)
+
     def get_dorm_weights(self, col: DormColumn) -> ndarray:
         values = col.values
         weights = np.zeros((len(values), len(self.dorms)))
@@ -50,7 +57,7 @@ class Model:
 
     def get_dorm_values(self, beta: ndarray) -> ndarray:
         return np.exp(np.hstack([
-            self.dorm_model_mats[name].dot(beta[self.dorm_model_index[name]])
+            self.dorm_model_mats[name].dot(beta[self.dorm_model_index[name]])[:, None]
             for name in self.dorms
         ]))
 
@@ -81,8 +88,19 @@ class Model:
 
         weights_mat = alpha*((alt_values - ref_values).T)
         gradient_mat = np.hstack([
-            weights_mat[i]*self.dorm_model_mats[name]
+            weights_mat[i][:, None]*self.dorm_model_mats[name]
             for i, name in enumerate(self.dorms)
         ])
 
         return gradient_mat.sum(axis=0)
+
+    def fit_model(self, beta: ndarray = None, **fit_options):
+        if beta is None:
+            beta = self.beta.copy()
+
+        self.soln = minimize(self.objective,
+                             beta,
+                             jac=self.gradient,
+                             bounds=self.bounds,
+                             **fit_options)
+        self.beta = self.soln.x
