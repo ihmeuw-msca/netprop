@@ -69,14 +69,15 @@ class Model:
             for name in self.dorms
         ]))
 
-    def objective(self, beta: ndarray) -> float:
-        beta = np.asarray(beta)
+    def get_residual(self, beta: ndarray) -> ndarray:
         dorm_values = self.get_dorm_values(beta)
         ref_pred = np.log(np.sum(self.ref_dorm_weights*dorm_values, axis=1))
         alt_pred = np.log(np.sum(self.alt_dorm_weights*dorm_values, axis=1))
-        pred = alt_pred - ref_pred
+        return self.data.obs.values - (alt_pred - ref_pred)
 
-        residual = self.data.obs.values - pred
+    def objective(self, beta: ndarray) -> float:
+        beta = np.asarray(beta)
+        residual = self.get_residual(beta)
         se = self.data.obs_se.values
         return 0.5*np.sum(residual**2/se**2)
 
@@ -133,6 +134,11 @@ class Model:
         jacobian2 = self.jacobian2(self.beta)[np.ix_(self.var_index, self.var_index)]
         self.beta_vcov = np.zeros((self.size, self.size))
         self.beta_vcov[np.ix_(self.var_index, self.var_index)] = np.linalg.inv(jacobian2)
+
+        # adjust the vcov by a scalar
+        weighted_residual = self.get_residual(self.beta)/self.data.obs_se.values
+        alpha = np.sum(weighted_residual**2)/(self.data.shape[0] - self.size)
+        self.beta_vcov *= alpha
 
     def predict(self,
                 df: DataFrame,
