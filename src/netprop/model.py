@@ -47,8 +47,15 @@ class Model:
             for name in self.dorms
         }
 
-        self.bounds = np.repeat(np.array([[-np.inf, np.inf]]), self.size, axis=0)
-        self.bounds[self.dorm_model_index[self.gold_dorm]] = 0.0
+        self.upriors = np.hstack([
+            self.dorm_models[name].uprior
+            for name in self.dorms
+        ])
+        self.upriors[:, self.dorm_model_index[self.gold_dorm]] = 0.0
+        self.gpriors = np.hstack([
+            self.dorm_models[name].gprior
+            for name in self.dorms
+        ])
         self.soln = None
         self.beta = np.zeros(self.size)
         self.beta_vcov = None
@@ -79,7 +86,8 @@ class Model:
         beta = np.asarray(beta)
         residual = self.get_residual(beta)
         se = self.data.obs_se.values
-        return 0.5*np.sum(residual**2/se**2)
+        return 0.5*(np.sum(residual**2/se**2) +
+                    np.sum((beta - self.gpriors[0])**2/self.gpriors[1]**2))
 
     def gradient(self, beta: ndarray) -> ndarray:
         beta = np.asarray(beta)
@@ -101,7 +109,8 @@ class Model:
             for i, name in enumerate(self.dorms)
         ])
 
-        return gradient_mat.sum(axis=0)
+        return (gradient_mat.sum(axis=0) +
+                (beta - self.gpriors[0])/self.gpriors[1]**2)
 
     def jacobian2(self, beta: ndarray) -> ndarray:
         beta = np.asarray(beta)
@@ -117,7 +126,8 @@ class Model:
             weights_mat[i][:, None]*self.dorm_model_mats[name]
             for i, name in enumerate(self.dorms)
         ])
-        return (jacobian_mat.T*alpha).dot(jacobian_mat)
+        return ((jacobian_mat.T*alpha).dot(jacobian_mat) +
+                np.diag(1.0/self.gpriors[1]**2))
 
     def fit_model(self, beta: ndarray = None, **fit_options):
         if beta is None:
@@ -128,7 +138,7 @@ class Model:
                              method="trust-constr",
                              jac=self.gradient,
                              hess=self.jacobian2,
-                             bounds=self.bounds,
+                             bounds=self.upriors.T,
                              **fit_options)
         self.beta = self.soln.x
         jacobian2 = self.jacobian2(self.beta)[np.ix_(self.var_index, self.var_index)]
