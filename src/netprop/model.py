@@ -129,13 +129,16 @@ class Model:
         return ((jacobian_mat.T*alpha).dot(jacobian_mat) +
                 np.diag(1.0/self.gpriors[1]**2))
 
-    def fit_model(self, beta: ndarray = None, **fit_options):
+    def fit_model(self,
+                  beta: ndarray = None,
+                  method: str = "trust-constr",
+                  **fit_options):
         if beta is None:
             beta = self.beta.copy()
 
         self.soln = minimize(self.objective,
                              beta,
-                             method="trust-constr",
+                             method=method,
                              jac=self.gradient,
                              hess=self.jacobian2,
                              bounds=self.upriors.T,
